@@ -1,0 +1,12 @@
+React 19+
+TypeScript 5+
+Vite 6+
+React Router DOM 6+
+Axios 1+
+TanStack Query 5+
+React Hook Form 7+
+Zod 3+
+Material UI 6+
+@emotion/react
+@emotion/styled
+@hookform/resolvers
