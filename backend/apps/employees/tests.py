@@ -77,6 +77,7 @@ class EmployeeFlowTests(APITestCase):
         self.assertIn('days_employed', resp.data['results'][0])
         self.assertIn('workflow_state', resp.data['results'][0])
         self.assertIn('allowed_transitions', resp.data['results'][0])
+        self.assertIn('user_role', resp.data['results'][0])
 
     def test_me_endpoint_returns_logged_in_employee(self):
         Employee.objects.create(
@@ -282,6 +283,78 @@ class EmployeeFlowTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertTrue(Employee.objects.filter(
             email='hr_created@example.com').exists())
+        self.assertEqual(resp.data['workflow_state'],
+                         Employee.WorkflowStates.APPLICATION_RECEIVED)
+
+    def test_admin_created_admin_is_automatically_hired(self):
+        self._auth(self.admin)
+        payload = {
+            'username': 'created_admin',
+            'password': 'Pass1234!',
+            'company_id': self.company_a.id,
+            'department_id': self.dept_a.id,
+            'email': 'created_admin@example.com',
+            'role': 'ADMIN',
+            'workflow_state': Employee.WorkflowStates.APPLICATION_RECEIVED,
+        }
+
+        resp = self.client.post('/api/employees/', payload, format='json')
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data['user_role'], 'ADMIN')
+        self.assertEqual(resp.data['workflow_state'],
+                         Employee.WorkflowStates.HIRED)
+        self.assertEqual(resp.data['allowed_transitions'], [])
+        employee_record = Employee.objects.get(email='created_admin@example.com')
+        self.assertTrue(employee_record.is_active)
+
+    def test_admin_created_hr_manager_is_automatically_hired(self):
+        self._auth(self.admin)
+        payload = {
+            'username': 'created_hr',
+            'password': 'Pass1234!',
+            'company_id': self.company_a.id,
+            'department_id': self.dept_a.id,
+            'email': 'created_hr@example.com',
+            'role': 'HR_MANAGER',
+        }
+
+        resp = self.client.post('/api/employees/', payload, format='json')
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data['user_role'], 'HR_MANAGER')
+        self.assertEqual(resp.data['workflow_state'],
+                         Employee.WorkflowStates.HIRED)
+        self.assertEqual(resp.data['allowed_transitions'], [])
+
+    def test_non_employee_role_cannot_enter_onboarding_pipeline(self):
+        admin_employee_user = User.objects.create_user(
+            username='admin_employee',
+            password='Pass1234!',
+            role='ADMIN',
+            email='admin_employee@example.com',
+        )
+        employee_record = Employee.objects.create(
+            user=admin_employee_user,
+            company=self.company_a,
+            department=self.dept_a,
+            email='admin_employee@example.com',
+            workflow_state=Employee.WorkflowStates.APPLICATION_RECEIVED,
+        )
+        self._auth(self.admin)
+
+        self.assertEqual(employee_record.workflow_state,
+                         Employee.WorkflowStates.HIRED)
+        resp = self.client.patch(
+            f'/api/employees/{employee_record.id}/',
+            {'workflow_state': Employee.WorkflowStates.INTERVIEW_SCHEDULED},
+            format='json',
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        employee_record.refresh_from_db()
+        self.assertEqual(employee_record.workflow_state,
+                         Employee.WorkflowStates.HIRED)
 
     def test_employee_can_only_see_own_profile(self):
         employee_record = Employee.objects.create(

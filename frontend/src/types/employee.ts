@@ -9,6 +9,7 @@ export interface Employee {
     user_id?: number;
     full_name?: string;
     username_display?: string;
+    user_role?: 'ADMIN' | 'HR_MANAGER' | 'EMPLOYEE';
     company_name?: string;
     department_name?: string | null;
     company_id: number;

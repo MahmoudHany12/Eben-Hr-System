@@ -11,6 +11,7 @@ User = get_user_model()
 
 SELF_EDIT_ALLOWED_FIELDS = {'address', 'mobile'}
 HIRED_STATES = {Employee.WorkflowStates.HIRED}
+ONBOARDING_ROLES = {User.Roles.EMPLOYEE}
 VALID_WORKFLOW_TRANSITIONS = {
     Employee.WorkflowStates.APPLICATION_RECEIVED: {
         Employee.WorkflowStates.INTERVIEW_SCHEDULED,
@@ -25,9 +26,26 @@ VALID_WORKFLOW_TRANSITIONS = {
 }
 
 
+def role_uses_onboarding(role: str | None) -> bool:
+    return role in ONBOARDING_ROLES
+
+
+def get_initial_workflow_state_for_role(role: str | None, requested_state: str | None = None) -> str:
+    """Return the workflow state that matches the role's business semantics."""
+    if not role_uses_onboarding(role):
+        return Employee.WorkflowStates.HIRED
+    return requested_state or Employee.WorkflowStates.APPLICATION_RECEIVED
+
+
 def get_allowed_transitions(current_state: str) -> list[str]:
     """Return valid target workflow states for the given state."""
     return sorted(VALID_WORKFLOW_TRANSITIONS.get(current_state, set()))
+
+
+def get_allowed_transitions_for_employee(employee: Employee) -> list[str]:
+    if not role_uses_onboarding(getattr(employee.user, 'role', None)):
+        return []
+    return get_allowed_transitions(employee.workflow_state)
 
 
 def validate_transition(current_state: str, target_state: str):
@@ -63,7 +81,8 @@ def _restrict_self_edit(employee: Employee, fields: dict):
 @transaction.atomic
 def onboard_employee(*, username: str, password: str, first_name: str | None, last_name: str | None, email: str, company, department=None, mobile: str | None = None, address: str | None = None, title: str | None = None, hire_date=None, workflow_state: str | None = None, is_active=None, role: str | None = None) -> Employee:
     """Create a User and Employee profile in a single transaction."""
-    workflow_state = workflow_state or Employee.WorkflowStates.APPLICATION_RECEIVED
+    role = role or User.Roles.EMPLOYEE
+    workflow_state = get_initial_workflow_state_for_role(role, workflow_state)
     validate_transition(workflow_state, workflow_state)
 
     user = User.objects.create_user(
@@ -73,7 +92,7 @@ def onboard_employee(*, username: str, password: str, first_name: str | None, la
         first_name=first_name or '',
         last_name=last_name or '',
     )
-    user.role = role or User.Roles.EMPLOYEE
+    user.role = role
     user.assigned_company = company if user.role == User.Roles.HR_MANAGER else None
     user.save(update_fields=['role', 'assigned_company'])
 
@@ -142,6 +161,9 @@ def update_employee_profile(*, employee: Employee, actor, **fields) -> Employee:
             user.assigned_company = fields.get('company') or employee.company
         else:
             user.assigned_company = None
+        if not role_uses_onboarding(user.role):
+            employee.workflow_state = Employee.WorkflowStates.HIRED
+            employee.is_active = True
     else:
         fields.pop('role', None)
 
@@ -165,9 +187,17 @@ def update_employee_profile(*, employee: Employee, actor, **fields) -> Employee:
         employee.hire_date = fields.pop('hire_date')
     if 'workflow_state' in fields and fields['workflow_state'] is not None:
         target_state = fields.pop('workflow_state')
-        validate_transition(employee.workflow_state, target_state)
-        employee.workflow_state = target_state
-        employee.is_active = is_hired_state(target_state)
+        if not role_uses_onboarding(user.role):
+            if target_state != Employee.WorkflowStates.HIRED:
+                raise BusinessRuleException(
+                    'Onboarding workflow transitions only apply to regular employees.')
+            employee.workflow_state = Employee.WorkflowStates.HIRED
+            employee.is_active = True
+            target_state = None
+        if target_state is not None:
+            validate_transition(employee.workflow_state, target_state)
+            employee.workflow_state = target_state
+            employee.is_active = is_hired_state(target_state)
     if 'is_active' in fields and fields['is_active'] is not None:
         fields.pop('is_active')
     else:

@@ -30,7 +30,8 @@ export function EmployeeProfilePage() {
 
     const isOwnProfile = user?.id === resolvedEmployee.user_id;
     const canEdit = Boolean(user && (user.role === 'ADMIN' || user.role === 'HR_MANAGER' || isOwnProfile));
-    const canChangeWorkflow = Boolean(user && (user.role === 'ADMIN' || (user.role === 'HR_MANAGER' && !isOwnProfile)));
+    const targetUsesOnboarding = resolvedEmployee.user_role === 'EMPLOYEE';
+    const canChangeWorkflow = Boolean(targetUsesOnboarding && user && (user.role === 'ADMIN' || (user.role === 'HR_MANAGER' && !isOwnProfile)));
     const allowedTransitions = canChangeWorkflow ? resolvedEmployee.allowed_transitions ?? [] : [];
     const transitionLabel = transitionTarget ? getWorkflowLabel(transitionTarget) : '';
 

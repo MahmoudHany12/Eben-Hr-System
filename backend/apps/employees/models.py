@@ -27,7 +27,7 @@ class Employee(models.Model):
         default=WorkflowStates.APPLICATION_RECEIVED,
         db_index=True,
     )
-    is_active = models.BooleanField(default=True, db_index=True)
+    is_active = models.BooleanField(default=False, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -41,3 +41,12 @@ class Employee(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.title or 'Employee'}"
+
+    def save(self, *args, **kwargs):
+        if getattr(self, 'user', None) and getattr(self.user, 'role', None) in ('ADMIN', 'HR_MANAGER'):
+            self.workflow_state = self.WorkflowStates.HIRED
+        self.is_active = self.workflow_state == self.WorkflowStates.HIRED
+        if kwargs.get('update_fields') is not None:
+            kwargs['update_fields'] = set(kwargs['update_fields']) | {
+                'workflow_state', 'is_active'}
+        super().save(*args, **kwargs)

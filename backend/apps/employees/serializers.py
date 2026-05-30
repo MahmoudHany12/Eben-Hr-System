@@ -10,7 +10,7 @@ from apps.core.utils import calculate_days_employed
 from apps.departments.models import Department
 
 from .models import Employee
-from .services import get_allowed_transitions, onboard_employee, update_employee_profile
+from .services import get_allowed_transitions_for_employee, onboard_employee, update_employee_profile
 
 
 User = get_user_model()
@@ -24,6 +24,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         source='department.name', read_only=True, allow_null=True)
     username_display = serializers.CharField(
         source='user.username', read_only=True)
+    user_role = serializers.CharField(source='user.role', read_only=True)
     username = serializers.CharField(
         write_only=True, required=False, allow_blank=True)
     password = serializers.CharField(
@@ -50,11 +51,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = (
-            'id', 'user_id', 'full_name', 'company_name', 'department_name', 'username_display', 'username', 'password', 'first_name', 'last_name', 'role',
+            'id', 'user_id', 'full_name', 'company_name', 'department_name', 'username_display', 'user_role', 'username', 'password', 'first_name', 'last_name', 'role',
             'company_id', 'department_id', 'email', 'mobile', 'address', 'title',
             'hire_date', 'workflow_state', 'allowed_transitions', 'is_active', 'created_at', 'updated_at', 'days_employed',
         )
-        read_only_fields = ('id', 'user_id', 'full_name', 'company_name', 'department_name', 'username_display',
+        read_only_fields = ('id', 'user_id', 'full_name', 'company_name', 'department_name', 'username_display', 'user_role',
                             'allowed_transitions', 'is_active', 'created_at', 'updated_at', 'days_employed')
 
     def get_full_name(self, obj: Employee):
@@ -116,4 +117,4 @@ class EmployeeSerializer(serializers.ModelSerializer):
         return calculate_days_employed(obj.hire_date)
 
     def get_allowed_transitions(self, obj: Employee):
-        return get_allowed_transitions(obj.workflow_state)
+        return get_allowed_transitions_for_employee(obj)
