@@ -42,8 +42,7 @@ export function Sidebar({ open = true, onClose, userRole }: SidebarProps) {
                     <Box component="img" src={Logo} alt="eBen" sx={{ height: 28, width: 'auto' }} />
                 </Box>
                 <Box>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.1 }}>eBen</Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>HR management workspace</Typography>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.1 }}>HR Management Workspace</Typography>
                 </Box>
             </Box>
             <Divider sx={{ mb: 2, borderColor: 'rgba(50,65,88,0.08)' }} />

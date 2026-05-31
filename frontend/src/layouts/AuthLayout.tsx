@@ -14,7 +14,6 @@ export function AuthLayout() {
                         </Grid>
                         <Grid item xs>
                             <Typography variant="h6" sx={{ fontWeight: 800 }}>{APP_NAME}</Typography>
-                            <Typography variant="body2" color="text.secondary">Welcome back — please sign in to continue.</Typography>
                         </Grid>
                     </Grid>
                     <Outlet />

@@ -25,12 +25,12 @@ export const appTheme = createTheme({
             main: '#d97706',
         },
         text: {
-            primary: '#0f172a',
+            primary: '#324158',
             secondary: '#475569',
         },
     },
     typography: {
-        fontFamily: ['Plus Jakarta Sans', 'Segoe UI', 'sans-serif'].join(','),
+        fontFamily: ['Quicksand', 'Segoe UI', 'sans-serif'].join(','),
         h1: { fontWeight: 800 },
         h2: { fontWeight: 800 },
         h3: { fontWeight: 700 },
@@ -50,6 +50,7 @@ export const appTheme = createTheme({
             styleOverrides: {
                 body: {
                     backgroundColor: '#ffffff',
+                    color: '#324158',
                 },
             },
         },

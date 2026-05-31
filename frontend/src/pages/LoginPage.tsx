@@ -57,7 +57,7 @@ export function LoginPage() {
                     Sign in to your account
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                    Welcome back. Enter your credentials to access the eBen HR dashboard.
+                    Enter your credentials to access the eBen HR dashboard.
                 </Typography>
             </div>
 

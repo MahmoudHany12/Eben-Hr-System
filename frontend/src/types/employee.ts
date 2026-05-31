@@ -24,5 +24,5 @@ export interface Employee {
     is_active?: boolean;
     created_at?: string;
     updated_at?: string;
-    days_employed?: number;
+    days_employed?: number | null;
 }

@@ -1,22 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Button, Chip, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TablePagination, Typography } from '@mui/material';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useEmployees } from '@/hooks/useEmployees';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useDepartments } from '@/hooks/useDepartments';
+import { useDeleteEmployee } from '@/hooks/useEmployeeMutations';
 import { Loader } from '@/components/Loader';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import { getApiErrorMessage } from '@/utils/apiErrors';
 import { getWorkflowLabel, WORKFLOW_CHIP_STYLES } from '@/utils/employeeWorkflow';
 
 export function EmployeesPage() {
     const [page, setPage] = useState(0);
+    const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
     const pageSize = 25;
     const navigate = useNavigate();
+    const { user } = useAuth();
     const { showToast } = useToast();
 
     const { data, isLoading, isError } = useEmployees({ page: page + 1, page_size: pageSize });
     const companiesResp = useCompanies({ page: 1, page_size: 200 });
     const departmentsResp = useDepartments({ page: 1, page_size: 500 });
+    const deleteEmployee = useDeleteEmployee();
+    const canDelete = user?.role === 'ADMIN';
 
     useEffect(() => {
         if (isError) {
@@ -39,6 +47,16 @@ export function EmployeesPage() {
     if (isLoading) return <Loader />;
 
     const handleChangePage = (_: unknown, newPage: number) => setPage(newPage);
+    const handleDelete = async () => {
+        if (!deleteTarget) return;
+        try {
+            await deleteEmployee.mutateAsync(deleteTarget.id);
+            showToast('Employee deleted', 'success');
+            setDeleteTarget(null);
+        } catch (err) {
+            showToast(getApiErrorMessage(err, 'Unable to delete employee'), 'error');
+        }
+    };
 
     return (
         <Box>
@@ -60,16 +78,20 @@ export function EmployeesPage() {
                             <TableCell>Company</TableCell>
                             <TableCell>Department</TableCell>
                             <TableCell>Days Employed</TableCell>
+                            {canDelete ? <TableCell align="right">Actions</TableCell> : null}
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {data?.results.map((e) => (
-                            <TableRow key={e.id} hover component={Link} to={`/employees/${e.id}`} sx={{ textDecoration: 'none', cursor: 'pointer' }}>
+                        {data?.results.map((e) => {
+                            const isHired = e.workflow_state === 'HIRED';
+                            const displayName = e.username_display ?? e.email;
+                            return (
+                            <TableRow key={e.id} hover onClick={() => navigate(`/employees/${e.id}`)} sx={{ cursor: 'pointer' }}>
                                 <TableCell>{e.username_display ?? e.email}</TableCell>
                                 <TableCell>{e.email}</TableCell>
                                 <TableCell>{e.mobile ?? ''}</TableCell>
                                 <TableCell>{e.title ?? ''}</TableCell>
-                                <TableCell>{e.hire_date ?? ''}</TableCell>
+                                <TableCell>{isHired ? e.hire_date ?? 'N/A' : 'N/A'}</TableCell>
                                 <TableCell>
                                     <Chip
                                         size="small"
@@ -78,10 +100,25 @@ export function EmployeesPage() {
                                     />
                                 </TableCell>
                                 <TableCell>{companyMap.get(e.company_id) ?? e.company_id}</TableCell>
-                                <TableCell>{e.department_id ? deptMap.get(e.department_id) ?? e.department_id : ''}</TableCell>
-                                <TableCell>{e.days_employed ?? 0}</TableCell>
+                                <TableCell>{e.department_id ? deptMap.get(e.department_id) ?? 'N/A' : 'N/A'}</TableCell>
+                                <TableCell>{isHired ? e.days_employed ?? 0 : 'N/A'}</TableCell>
+                                {canDelete ? (
+                                    <TableCell align="right">
+                                        <Button
+                                            color="error"
+                                            size="small"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                setDeleteTarget({ id: e.id, name: displayName });
+                                            }}
+                                        >
+                                            Delete
+                                        </Button>
+                                    </TableCell>
+                                ) : null}
                             </TableRow>
-                        ))}
+                            );
+                        })}
                     </TableBody>
                 </Table>
             </TableContainer>
@@ -93,6 +130,15 @@ export function EmployeesPage() {
                 onPageChange={handleChangePage}
                 rowsPerPage={pageSize}
                 rowsPerPageOptions={[pageSize]}
+            />
+            <ConfirmDialog
+                open={Boolean(deleteTarget)}
+                title={deleteTarget ? `Delete employee "${deleteTarget.name}"?` : 'Delete employee?'}
+                description="This will permanently delete the employee profile and user account. The username can be reused after deletion."
+                confirmLabel="Delete"
+                cancelLabel="Cancel"
+                onConfirm={() => { void handleDelete(); }}
+                onClose={() => setDeleteTarget(null)}
             />
         </Box>
     );

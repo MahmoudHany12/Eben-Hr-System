@@ -62,6 +62,102 @@ class EmployeeFlowTests(APITestCase):
         self.assertEqual(created_employee.workflow_state,
                          Employee.WorkflowStates.APPLICATION_RECEIVED)
         self.assertFalse(created_employee.is_active)
+        self.assertIsNone(created_employee.hire_date)
+        self.assertIsNone(resp.data['hire_date'])
+        self.assertIsNone(resp.data['days_employed'])
+
+    def test_employee_creation_requires_valid_password(self):
+        self._auth(self.admin)
+        payload = {
+            'username': 'weak_emp',
+            'password': 'password',
+            'company_id': self.company_a.id,
+            'department_id': self.dept_a.id,
+            'email': 'weak_emp@example.com',
+        }
+
+        resp = self.client.post('/api/employees/', payload, format='json')
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Password must include at least 1 uppercase letter.', str(resp.data))
+        self.assertIn('Password must include at least 1 special character.', str(resp.data))
+        self.assertFalse(User.objects.filter(username='weak_emp').exists())
+        self.assertFalse(Employee.objects.filter(email='weak_emp@example.com').exists())
+
+    def test_employee_creation_requires_password(self):
+        self._auth(self.admin)
+        payload = {
+            'username': 'missing_password_emp',
+            'company_id': self.company_a.id,
+            'department_id': self.dept_a.id,
+            'email': 'missing_password_emp@example.com',
+        }
+
+        resp = self.client.post('/api/employees/', payload, format='json')
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Password is required when creating an employee.', str(resp.data))
+        self.assertFalse(User.objects.filter(username='missing_password_emp').exists())
+        self.assertFalse(Employee.objects.filter(email='missing_password_emp@example.com').exists())
+
+    def test_employee_creation_rejects_duplicate_username(self):
+        self._auth(self.admin)
+        payload = {
+            'username': self.employee_user.username,
+            'password': 'Pass1234!',
+            'company_id': self.company_a.id,
+            'department_id': self.dept_a.id,
+            'email': 'duplicate_username@example.com',
+        }
+
+        resp = self.client.post('/api/employees/', payload, format='json')
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('User with this username already exists.', str(resp.data))
+        self.assertFalse(Employee.objects.filter(email='duplicate_username@example.com').exists())
+
+    def test_employee_delete_removes_employee_record_from_database(self):
+        employee_record = Employee.objects.create(
+            user=self.employee_user,
+            company=self.company_a,
+            department=self.dept_a,
+            email='delete_emp@example.com',
+            mobile='+201111111111',
+        )
+        employee_id = employee_record.id
+
+        self._auth(self.admin)
+        resp = self.client.delete(f'/api/employees/{employee_id}/')
+
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Employee.objects.filter(id=employee_id).exists())
+
+    def test_employee_delete_removes_user_and_allows_username_reuse(self):
+        employee_record = Employee.objects.create(
+            user=self.employee_user,
+            company=self.company_a,
+            department=self.dept_a,
+            email='delete_reuse@example.com',
+            mobile='+201111111111',
+        )
+        employee_id = employee_record.id
+
+        self._auth(self.admin)
+        delete_resp = self.client.delete(f'/api/employees/{employee_id}/')
+        self.assertEqual(delete_resp.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Employee.objects.filter(id=employee_id).exists())
+        self.assertFalse(User.objects.filter(username='emp').exists())
+
+        payload = {
+            'username': 'emp',
+            'password': 'Pass1234!',
+            'company_id': self.company_a.id,
+            'department_id': self.dept_a.id,
+            'email': 'reused_emp@example.com',
+        }
+        create_resp = self.client.post('/api/employees/', payload, format='json')
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(User.objects.filter(username='emp').exists())
 
     def test_employee_list_includes_days_employed(self):
         employee_record = Employee.objects.create(
@@ -79,6 +175,46 @@ class EmployeeFlowTests(APITestCase):
         self.assertIn('allowed_transitions', resp.data['results'][0])
         self.assertIn('user_role', resp.data['results'][0])
 
+    def test_non_hired_employee_does_not_return_hire_date_or_days_employed(self):
+        employee_record = Employee.objects.create(
+            user=self.employee_user,
+            company=self.company_a,
+            department=self.dept_a,
+            email='non_hired@example.com',
+            mobile='+201111111111',
+            hire_date='2026-01-01',
+            workflow_state=Employee.WorkflowStates.APPLICATION_RECEIVED,
+        )
+        self._auth(self.admin)
+
+        resp = self.client.get(f'/api/employees/{employee_record.id}/')
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        employee_record.refresh_from_db()
+        self.assertIsNone(employee_record.hire_date)
+        self.assertIsNone(resp.data['hire_date'])
+        self.assertIsNone(resp.data['days_employed'])
+
+    def test_hired_transition_sets_hire_date_and_days_employed(self):
+        employee_record = Employee.objects.create(
+            user=self.employee_user,
+            company=self.company_a,
+            department=self.dept_a,
+            email='transition_hired_date@example.com',
+            workflow_state=Employee.WorkflowStates.INTERVIEW_SCHEDULED,
+        )
+        self._auth(self.admin)
+
+        resp = self.client.patch(
+            f'/api/employees/{employee_record.id}/',
+            {'workflow_state': Employee.WorkflowStates.HIRED},
+            format='json',
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(resp.data['hire_date'])
+        self.assertIsNotNone(resp.data['days_employed'])
+
     def test_me_endpoint_returns_logged_in_employee(self):
         Employee.objects.create(
             user=self.employee_user,
@@ -93,6 +229,68 @@ class EmployeeFlowTests(APITestCase):
         self.assertEqual(resp.data['email'], 'emp@example.com')
         self.assertEqual(resp.data['company_name'], 'Company A')
         self.assertEqual(resp.data['department_name'], 'Dept A')
+
+    def test_admin_me_and_employee_detail_are_separate_profiles(self):
+        admin_profile = Employee.objects.create(
+            user=self.admin,
+            company=self.company_a,
+            department=self.dept_a,
+            email='admin_profile@example.com',
+        )
+        selected_user = User.objects.create_user(
+            username='selected_emp',
+            password='Pass1234!',
+            role='EMPLOYEE',
+            email='selected_emp@example.com',
+        )
+        selected_profile = Employee.objects.create(
+            user=selected_user,
+            company=self.company_a,
+            department=self.dept_a,
+            email='selected_emp@example.com',
+        )
+
+        self._auth(self.admin)
+        me_resp = self.client.get('/api/employees/me/')
+        detail_resp = self.client.get(f'/api/employees/{selected_profile.id}/')
+
+        self.assertEqual(me_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(me_resp.data['id'], admin_profile.id)
+        self.assertEqual(me_resp.data['username_display'], 'admin')
+        self.assertEqual(detail_resp.data['id'], selected_profile.id)
+        self.assertEqual(detail_resp.data['username_display'], 'selected_emp')
+
+    def test_hr_me_and_employee_detail_are_separate_profiles(self):
+        hr_profile = Employee.objects.create(
+            user=self.hr,
+            company=self.company_a,
+            department=self.dept_a,
+            email='hr_profile@example.com',
+        )
+        selected_user = User.objects.create_user(
+            username='hr_selected_emp',
+            password='Pass1234!',
+            role='EMPLOYEE',
+            email='hr_selected_emp@example.com',
+        )
+        selected_profile = Employee.objects.create(
+            user=selected_user,
+            company=self.company_a,
+            department=self.dept_a,
+            email='hr_selected_emp@example.com',
+        )
+
+        self._auth(self.hr)
+        me_resp = self.client.get('/api/employees/me/')
+        detail_resp = self.client.get(f'/api/employees/{selected_profile.id}/')
+
+        self.assertEqual(me_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(me_resp.data['id'], hr_profile.id)
+        self.assertEqual(me_resp.data['username_display'], 'hr')
+        self.assertEqual(detail_resp.data['id'], selected_profile.id)
+        self.assertEqual(detail_resp.data['username_display'], 'hr_selected_emp')
 
     def test_employee_cannot_change_own_role_or_company(self):
         employee_record = Employee.objects.create(
@@ -352,6 +550,69 @@ class EmployeeFlowTests(APITestCase):
         )
 
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_admin_cannot_modify_own_role(self):
+        admin_employee = Employee.objects.create(
+            user=self.admin,
+            company=self.company_a,
+            department=self.dept_a,
+            email='admin_profile@example.com',
+        )
+        self._auth(self.admin)
+
+        resp = self.client.patch(
+            f'/api/employees/{admin_employee.id}/',
+            {'role': 'EMPLOYEE'},
+            format='json',
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Admins cannot modify their own role.', str(resp.data))
+        self.admin.refresh_from_db()
+        self.assertEqual(self.admin.role, 'ADMIN')
+
+    def test_hr_manager_cannot_edit_role_assignments(self):
+        employee_record = Employee.objects.create(
+            user=self.employee_user,
+            company=self.company_a,
+            department=self.dept_a,
+            email='role_blocked@example.com',
+            mobile='+201111111111',
+        )
+        self._auth(self.hr)
+
+        resp = self.client.patch(
+            f'/api/employees/{employee_record.id}/',
+            {'role': 'ADMIN'},
+            format='json',
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Only admins can change role assignments.', str(resp.data))
+        self.employee_user.refresh_from_db()
+        self.assertEqual(self.employee_user.role, 'EMPLOYEE')
+
+    def test_admin_can_change_other_user_role(self):
+        employee_record = Employee.objects.create(
+            user=self.employee_user,
+            company=self.company_a,
+            department=self.dept_a,
+            email='role_allowed@example.com',
+            mobile='+201111111111',
+        )
+        self._auth(self.admin)
+
+        resp = self.client.patch(
+            f'/api/employees/{employee_record.id}/',
+            {'role': 'HR_MANAGER'},
+            format='json',
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.employee_user.refresh_from_db()
+        employee_record.refresh_from_db()
+        self.assertEqual(self.employee_user.role, 'HR_MANAGER')
+        self.assertEqual(employee_record.workflow_state, Employee.WorkflowStates.HIRED)
         employee_record.refresh_from_db()
         self.assertEqual(employee_record.workflow_state,
                          Employee.WorkflowStates.HIRED)

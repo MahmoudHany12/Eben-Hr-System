@@ -78,3 +78,8 @@ class DepartmentApiTests(APITestCase):
 
         employee.refresh_from_db()
         self.assertIsNone(employee.department)
+
+        employee_resp = self.client.get(f'/api/employees/{employee.id}/')
+        self.assertEqual(employee_resp.status_code, status.HTTP_200_OK)
+        self.assertIsNone(employee_resp.data['department_id'])
+        self.assertEqual(employee_resp.data['department_name'], 'N/A')

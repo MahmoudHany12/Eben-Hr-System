@@ -2,6 +2,7 @@
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.utils import timezone
 
 from apps.core.exceptions import BusinessRuleException
 
@@ -66,6 +67,12 @@ def is_hired_state(workflow_state: str) -> bool:
     return workflow_state in HIRED_STATES
 
 
+def normalize_hire_date(workflow_state: str, hire_date):
+    if not is_hired_state(workflow_state):
+        return None
+    return hire_date or timezone.localdate()
+
+
 def _is_self_edit(actor, employee: Employee) -> bool:
     return bool(actor and actor.is_authenticated and getattr(employee, 'user_id', None) == getattr(actor, 'id', None))
 
@@ -84,6 +91,7 @@ def onboard_employee(*, username: str, password: str, first_name: str | None, la
     role = role or User.Roles.EMPLOYEE
     workflow_state = get_initial_workflow_state_for_role(role, workflow_state)
     validate_transition(workflow_state, workflow_state)
+    hire_date = normalize_hire_date(workflow_state, hire_date)
 
     user = User.objects.create_user(
         username=username,
@@ -115,11 +123,18 @@ def onboard_employee(*, username: str, password: str, first_name: str | None, la
 @transaction.atomic
 def update_employee_profile(*, employee: Employee, actor, **fields) -> Employee:
     """Update both the User and Employee records with business-rule enforcement."""
-    if _is_self_edit(actor, employee):
-        _restrict_self_edit(employee, fields)
-
     actor_role = getattr(actor, 'role', None)
     actor_company = getattr(actor, 'assigned_company', None)
+
+    requested_role = fields.get('role')
+    if requested_role is not None:
+        if actor_role != User.Roles.ADMIN:
+            raise BusinessRuleException('Only admins can change role assignments.')
+        if _is_self_edit(actor, employee):
+            raise BusinessRuleException('Admins cannot modify their own role.')
+
+    if _is_self_edit(actor, employee):
+        _restrict_self_edit(employee, fields)
 
     if actor_role == User.Roles.HR_MANAGER:
         if not actor_company:
@@ -203,6 +218,14 @@ def update_employee_profile(*, employee: Employee, actor, **fields) -> Employee:
     else:
         fields.pop('is_active', None)
 
+    employee.hire_date = normalize_hire_date(employee.workflow_state, employee.hire_date)
     employee.full_clean()
     employee.save()
     return employee
+
+
+@transaction.atomic
+def delete_employee(*, employee: Employee):
+    """Delete an employee and the paired user account so credentials can be reused."""
+    user = employee.user
+    user.delete()

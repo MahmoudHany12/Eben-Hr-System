@@ -1,6 +1,7 @@
 :root {
     color-scheme: light;
-    font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+    font-family: 'Quicksand', 'Segoe UI', sans-serif;
+    color: #324158;
     line-height: 1.5;
     font-weight: 400;
     font-synthesis: none;
@@ -20,6 +21,7 @@ body,
 body {
     min-height: 100vh;
     background: inherit;
+    color: #324158;
 }
 
 *:focus {

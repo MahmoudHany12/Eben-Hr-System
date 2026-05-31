@@ -13,7 +13,17 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { getApiErrorMessage } from '@/utils/apiErrors';
 
-const employeeSchema = z.object({
+const passwordSchema = z.string()
+    .min(8, 'Password must be at least 8 characters.')
+    .regex(/[A-Z]/, 'Password must include at least 1 uppercase letter.')
+    .regex(/[^A-Za-z0-9]/, 'Password must include at least 1 special character.');
+
+const optionalPasswordSchema = z.preprocess(
+    (value) => value === '' ? undefined : value,
+    passwordSchema.optional(),
+);
+
+const employeeBaseSchema = z.object({
     email: z.string().email('Invalid email').min(1, 'Email is required'),
     mobile: z.string().optional().refine((v) => !v || /^\+?[0-9]{7,15}$/.test(v), 'Invalid mobile'),
     first_name: z.string().optional(),
@@ -23,11 +33,18 @@ const employeeSchema = z.object({
     company_id: z.number(),
     department_id: z.number().nullable().optional(),
     username: z.string().optional(),
-    password: z.string().optional(),
     role: z.enum(['ADMIN', 'HR_MANAGER', 'EMPLOYEE']).optional(),
 });
 
-type EmployeeFormValues = z.infer<typeof employeeSchema>;
+const createEmployeeSchema = employeeBaseSchema.extend({
+    password: passwordSchema,
+});
+
+const updateEmployeeSchema = employeeBaseSchema.extend({
+    password: optionalPasswordSchema,
+});
+
+type EmployeeFormValues = z.infer<typeof employeeBaseSchema> & { password?: string };
 
 export function EmployeeFormPage() {
     const params = useParams();
@@ -49,10 +66,13 @@ export function EmployeeFormPage() {
     const isOwnProfile = !isCreate && user?.id === employee?.user_id;
     const isRestrictedEdit = (user?.role === 'EMPLOYEE' || user?.role === 'HR_MANAGER') && isOwnProfile;
     const isHrCreateLocked = isCreate && user?.role === 'HR_MANAGER' && !!user?.assigned_company_id;
+    const canAssignRole = user?.role === 'ADMIN' && !isOwnProfile;
+    const canEditHireDate = employee?.workflow_state === 'HIRED';
 
     const roleOptions = useMemo(() => ['ADMIN', 'HR_MANAGER', 'EMPLOYEE'] as const, []);
 
-    const { control, register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm<EmployeeFormValues>({ resolver: zodResolver(employeeSchema) });
+    const formSchema = useMemo(() => isCreate ? createEmployeeSchema : updateEmployeeSchema, [isCreate]);
+    const { control, register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm<EmployeeFormValues>({ resolver: zodResolver(formSchema) });
 
     useEffect(() => {
         if (employee) {
@@ -65,11 +85,15 @@ export function EmployeeFormPage() {
                 hire_date: employee.hire_date ?? undefined,
                 company_id: employee.company_id,
                 department_id: employee.department_id ?? null,
+                role: employee.user_role,
             });
             setSelectedCompany(employee.company_id);
         } else if (isCreate && user?.assigned_company_id) {
             setSelectedCompany(user.assigned_company_id);
             setValue('company_id', user.assigned_company_id);
+            setValue('role', 'EMPLOYEE');
+        } else if (isCreate) {
+            setValue('role', 'EMPLOYEE');
         }
     }, [employee, isCreate, reset, setValue, user]);
 
@@ -90,6 +114,9 @@ export function EmployeeFormPage() {
                 ...values,
                 department_id: values.department_id || null,
             };
+            if (!payload.password) {
+                delete payload.password;
+            }
             if (isCreate && user?.role === 'HR_MANAGER' && user.assigned_company_id) {
                 payload.company_id = user.assigned_company_id;
             }
@@ -129,13 +156,15 @@ export function EmployeeFormPage() {
                         )} />
 
                         <TextField label="Title" {...register('title')} error={!!errors.title} helperText={errors.title?.message} fullWidth />
-                        <TextField label="Hire Date" type="date" InputLabelProps={{ shrink: true }} {...register('hire_date')} error={!!errors.hire_date} helperText={errors.hire_date?.message} fullWidth />
+                        {canEditHireDate ? (
+                            <TextField label="Hire Date" type="date" InputLabelProps={{ shrink: true }} {...register('hire_date')} error={!!errors.hire_date} helperText={errors.hire_date?.message} fullWidth />
+                        ) : null}
 
                         {/* Optional credentials for creating user record */}
                         <TextField label="Username" {...register('username')} error={!!errors.username} helperText={errors.username?.message} fullWidth />
                         <TextField label="Password" type="password" {...register('password')} error={!!errors.password} helperText={errors.password?.message} fullWidth />
 
-                        {(user?.role === 'ADMIN' || (user?.role === 'HR_MANAGER' && !isOwnProfile)) && (
+                        {canAssignRole ? (
                             <Controller control={control} name="role" render={({ field }) => (
                                 <TextField select label="Role" {...field} fullWidth>
                                     {roleOptions.map((r) => (
@@ -143,7 +172,7 @@ export function EmployeeFormPage() {
                                     ))}
                                 </TextField>
                             )} />
-                        )}
+                        ) : null}
 
                         <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
                             <Button onClick={() => navigate('/employees')} disabled={isSubmitting}>Cancel</Button>

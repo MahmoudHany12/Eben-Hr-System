@@ -10,11 +10,16 @@ from apps.core.utils import calculate_days_employed
 from apps.departments.models import Department
 
 from .models import Employee
-from .services import get_allowed_transitions_for_employee, onboard_employee, update_employee_profile
+from .services import get_allowed_transitions_for_employee, is_hired_state, onboard_employee, update_employee_profile
 
 
 User = get_user_model()
 SELF_EDIT_ALLOWED_FIELDS = {'address', 'mobile'}
+PASSWORD_MIN_LENGTH_MESSAGE = 'Password must be at least 8 characters.'
+PASSWORD_UPPERCASE_MESSAGE = 'Password must include at least 1 uppercase letter.'
+PASSWORD_SPECIAL_CHARACTER_MESSAGE = 'Password must include at least 1 special character.'
+PASSWORD_REQUIRED_MESSAGE = 'Password is required when creating an employee.'
+USERNAME_UNIQUE_MESSAGE = 'User with this username already exists.'
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
@@ -67,6 +72,14 @@ class EmployeeSerializer(serializers.ModelSerializer):
             if not attrs.get('email'):
                 raise serializers.ValidationError(
                     {'email': 'This field is required.'})
+            if not attrs.get('password'):
+                raise serializers.ValidationError(
+                    {'password': PASSWORD_REQUIRED_MESSAGE})
+
+            requested_username = attrs.get('username') or attrs.get('email')
+            if requested_username and User.objects.filter(username=requested_username).exists():
+                raise serializers.ValidationError(
+                    {'username': USERNAME_UNIQUE_MESSAGE})
 
         company = attrs.get('company') or getattr(
             self.instance, 'company', None)
@@ -105,6 +118,32 @@ class EmployeeSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Invalid mobile number format')
         return value
 
+    def validate_username(self, value):
+        if not value:
+            return value
+
+        qs = User.objects.filter(username=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.user_id)
+        if qs.exists():
+            raise serializers.ValidationError(USERNAME_UNIQUE_MESSAGE)
+        return value
+
+    def validate_password(self, value):
+        if not value:
+            return value
+
+        errors = []
+        if len(value) < 8:
+            errors.append(PASSWORD_MIN_LENGTH_MESSAGE)
+        if not re.search(r'[A-Z]', value):
+            errors.append(PASSWORD_UPPERCASE_MESSAGE)
+        if not re.search(r'[^A-Za-z0-9]', value):
+            errors.append(PASSWORD_SPECIAL_CHARACTER_MESSAGE)
+        if errors:
+            raise serializers.ValidationError(errors)
+        return value
+
     def create(self, validated_data):
         return onboard_employee(**validated_data)
 
@@ -113,7 +152,18 @@ class EmployeeSerializer(serializers.ModelSerializer):
         actor = getattr(request, 'user', None)
         return update_employee_profile(employee=instance, actor=actor, **validated_data)
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not is_hired_state(instance.workflow_state):
+            data['hire_date'] = None
+            data['days_employed'] = None
+        if data.get('department_name') is None:
+            data['department_name'] = 'N/A'
+        return data
+
     def get_days_employed(self, obj: Employee):
+        if not is_hired_state(obj.workflow_state):
+            return None
         return calculate_days_employed(obj.hire_date)
 
     def get_allowed_transitions(self, obj: Employee):

@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from apps.core.validators import validate_mobile
 
 
@@ -46,7 +47,11 @@ class Employee(models.Model):
         if getattr(self, 'user', None) and getattr(self.user, 'role', None) in ('ADMIN', 'HR_MANAGER'):
             self.workflow_state = self.WorkflowStates.HIRED
         self.is_active = self.workflow_state == self.WorkflowStates.HIRED
+        if not self.is_active:
+            self.hire_date = None
+        elif self.hire_date is None:
+            self.hire_date = timezone.localdate()
         if kwargs.get('update_fields') is not None:
             kwargs['update_fields'] = set(kwargs['update_fields']) | {
-                'workflow_state', 'is_active'}
+                'workflow_state', 'is_active', 'hire_date'}
         super().save(*args, **kwargs)

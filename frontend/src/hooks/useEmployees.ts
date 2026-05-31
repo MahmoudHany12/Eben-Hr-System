@@ -12,17 +12,18 @@ export function useEmployees(params?: Record<string, any>) {
     });
 }
 
-export function useEmployee(id?: number) {
+export function useEmployee(id?: number, enabled = true) {
     return useQuery<Employee | null>({
         queryKey: ['employee', id],
         queryFn: async () => (id ? employeeApi.getEmployee(id) : null),
-        enabled: Boolean(id),
+        enabled: Boolean(id) && enabled,
     });
 }
 
-export function useMyEmployee() {
+export function useMyEmployee(enabled = true) {
     return useQuery<Employee | null>({
         queryKey: ['employee', 'me'],
         queryFn: async () => employeeApi.getMe(),
+        enabled,
     });
 }

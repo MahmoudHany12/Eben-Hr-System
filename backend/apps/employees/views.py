@@ -12,7 +12,7 @@ from .models import Employee
 from .permissions import EmployeeAccess
 from .selectors import list_employees
 from .serializers import EmployeeSerializer
-from .services import onboard_employee
+from .services import delete_employee, onboard_employee
 
 
 class EmployeeViewSet(
@@ -83,7 +83,7 @@ class EmployeeViewSet(
         employee = onboard_employee(
             username=serializer.validated_data.get(
                 'username') or serializer.validated_data['email'],
-            password=serializer.validated_data.get('password') or 'changeme',
+            password=serializer.validated_data['password'],
             first_name=serializer.validated_data.get('first_name'),
             last_name=serializer.validated_data.get('last_name'),
             email=serializer.validated_data['email'],
@@ -104,4 +104,4 @@ class EmployeeViewSet(
         serializer.save()
 
     def perform_destroy(self, instance):
-        instance.delete()
+        delete_employee(employee=instance)

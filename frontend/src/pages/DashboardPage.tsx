@@ -26,17 +26,16 @@ export function DashboardPage() {
 
     const employeeReport = useMemo(() => {
         const rows = employees.data?.results ?? [];
-        const applications = rows.filter((row) => row.workflow_state === 'APPLICATION_RECEIVED').length;
-        const interviews = rows.filter((row) => row.workflow_state === 'INTERVIEW_SCHEDULED').length;
-        const hired = rows.filter((row) => row.workflow_state === 'HIRED').length;
-        const notAccepted = rows.filter((row) => row.workflow_state === 'NOT_ACCEPTED').length;
-        const withDepartment = rows.filter((row) => Boolean(row.department_id)).length;
+        const hiredRows = rows.filter((row) => row.workflow_state === 'HIRED');
+        const withDepartment = hiredRows.filter((row) => Boolean(row.department_id)).length;
+        const withHireDate = hiredRows.filter((row) => Boolean(row.hire_date)).length;
+        const totalDays = hiredRows.reduce((sum, row) => sum + (row.days_employed ?? 0), 0);
+        const averageDays = hiredRows.length ? Math.round(totalDays / hiredRows.length) : 0;
         return [
-            { label: 'Applications Received', value: applications },
-            { label: 'Interviews Scheduled', value: interviews },
-            { label: 'Hired', value: hired },
-            { label: 'Not Accepted', value: notAccepted },
-            { label: 'Assigned departments', value: withDepartment },
+            { label: 'Hired Employees', value: hiredRows.length },
+            { label: 'Assigned Departments', value: withDepartment },
+            { label: 'Hire Dates Recorded', value: withHireDate },
+            { label: 'Average Days Employed', value: averageDays },
         ];
     }, [employees.data]);
 
@@ -69,7 +68,7 @@ export function DashboardPage() {
             </Box>
             <Box>
                 <Typography variant="h5" fontWeight={800} sx={{ mb: 2 }}>Employee Report</Typography>
-                <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(5, 1fr)' } }}>
+                <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' } }}>
                     {employeeReport.map((card) => (
                         <Paper key={card.label} sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
                             <Box sx={{ bgcolor: 'rgba(50,65,88,0.04)', color: 'text.primary', p: 1, borderRadius: 1 }}>

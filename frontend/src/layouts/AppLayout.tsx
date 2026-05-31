@@ -135,8 +135,7 @@ export function AppLayout() {
                     </Box>
                     {desktopSidebarOpen ? (
                         <Box sx={{ minWidth: 0 }}>
-                            <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.1 }}>{APP_NAME}</Typography>
-                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>HR management workspace</Typography>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.1 }}>HR Management Workspace</Typography>
                         </Box>
                     ) : null}
                 </Box>
@@ -188,8 +187,7 @@ export function AppLayout() {
                         <Box component="img" src={Logo} alt={APP_NAME} sx={{ height: 26, width: 'auto' }} />
                     </Box>
                     <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.1 }}>{APP_NAME}</Typography>
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>HR management workspace</Typography>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.1 }}>HR Management Workspace</Typography>
                     </Box>
                 </Box>
                 <Divider sx={{ mb: 2, borderColor: 'rgba(50,65,88,0.08)' }} />
