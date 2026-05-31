@@ -2,7 +2,6 @@ import { AppBar, Box, IconButton, Toolbar, Typography } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import { Link } from 'react-router-dom';
 import { APP_NAME } from '@/utils/constants';
-import { ROLE_LABELS } from '@/utils/permissions';
 import type { User } from '@/types/auth';
 
 interface NavbarProps {
@@ -25,7 +24,7 @@ export function Navbar({ user, onMenuClick }: NavbarProps) {
                     </Typography>
                 </Box>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    {user ? `${user.username} · ${ROLE_LABELS[user.role]}` : 'Guest'}
+                    {user ? user.username : 'Guest'}
                 </Typography>
             </Toolbar>
         </AppBar>
