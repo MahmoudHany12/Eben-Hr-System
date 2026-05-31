@@ -95,12 +95,78 @@ The backend follows a domain-driven design pattern organized by apps:
 
 ### Database Schema Considerations (PostgreSQL)
 
-* **`User` (Custom Auth):** Fields include `role` and an optional `assigned_company`.
-* **`Company`:** Has a one-to-many relationship with both `Department` and `Employee`.
-* **`Department`:** Belongs to a single `Company`. Enforces a unique constraint: `(name, company)`.
-* **`Employee`:** One-to-one relationship with `User` (via `employee_profile`), belongs to one `Company`, optionally tied to a `Department`, and enforces a unique `email`.
+## Database Design (ERD)
 
----
+### Entity Relationship Diagram
+
+```text
+┌─────────────────────┐
+│       Company       │
+├─────────────────────┤
+│ id (PK)             │
+│ name (Unique)       │
+│ address             │
+│ created_at          │
+│ updated_at          │
+└─────────┬───────────┘
+          │ 1:N
+          │
+          ▼
+┌─────────────────────┐
+│     Department      │
+├─────────────────────┤
+│ id (PK)             │
+│ name                │
+│ company_id (FK)     │
+│ created_at          │
+│ updated_at          │
+└─────────┬───────────┘
+          │ 1:N
+          │
+          ▼
+┌──────────────────────────┐
+│        Employee          │
+├──────────────────────────┤
+│ id (PK)                  │
+│ user_id (O2O FK)         │
+│ company_id (FK)          │
+│ department_id (FK, NULL) │
+│ email (Unique)           │
+│ mobile                   │
+│ address                  │
+│ title                    │
+│ hire_date                │
+│ onboarding_status        │
+│ is_active                │
+│ created_at               │
+│ updated_at               │
+└──────────┬───────────────┘
+           │ 1:1
+           │
+           ▼
+┌──────────────────────────┐
+│           User           │
+├──────────────────────────┤
+│ id (PK)                  │
+│ username                 │
+│ email                    │
+│ password                 │
+│ role                     │
+│ assigned_company_id (FK) │
+└──────────────────────────┘
+```
+
+### Relationship Summary
+
+| Relationship           | Cardinality | Delete Behavior |
+| ---------------------- | ----------- | --------------- |
+| Company → Departments  | 1 : N       | CASCADE         |
+| Company → Employees    | 1 : N       | CASCADE         |
+| Department → Employees | 1 : N       | SET_NULL        |
+| User → Employee        | 1 : 0..1    | CASCADE         |
+
+
+
 
 ## ⚙️ 5. Local Setup Instructions
 
